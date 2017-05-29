@@ -1,0 +1,6 @@
+TS_ECOBJ_01:
+    - TC_GET_NULL:
+        - URL: << URL >>
+          METHOD: << METHOD_GET >>
+          HEADERS: [<< HEADER_CONTENT_TYPE >>, << HEADER_ACCEPT >>]
+          BODY: << BODY_EMPTY >>
