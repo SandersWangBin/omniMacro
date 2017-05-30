@@ -5,9 +5,12 @@ import re
 from omniMacroCfg import loadStyle
 
 STYLE_CPP = 'C++'
-KEYWORD_MACRO_DEFINE = 'MACRO_DEFINE'
+KEYWORD_VAR_DEFINE = 'VAR_DEFINE'
 KEYWORD_VAR_REFER = 'VAR_REFER'
 KEYWORD_VAR_PREFIX_NUM = 'VAR_PREFIX_NUM'
+KEYWORD_MULTILINE_DEFINE = 'MULTILINE_DEFINE'
+KEYWORD_MULTILINE_CONTINUE = 'MULTILINE_CONTINUE'
+KEYWORD_MULTILINE_REFER_01 = 'MULTILINE_REFER_01'
 
 def getStyle(): return loadStyle(STYLE_CPP)
 
@@ -15,13 +18,32 @@ def formatVar(var):
     prefixNum = getStyle()[KEYWORD_VAR_PREFIX_NUM]
     return var[prefixNum:-prefixNum]
 
-def compileLine(line, macroDict):
+def formatMultiName(multi):
+    prefixNum = getStyle()[KEYWORD_VAR_PREFIX_NUM]
+    return multi[prefixNum:-(prefixNum+2)].strip()
+
+def formatMultiLines(multiLines, indent):
+    newLine = ''
+    for line in multiLines.split('\n'):
+        newLine = newLine + indent + line + '\n'
+    return newLine
+
+def compileVar(line, macroDict):
     newLine = line
     reg = getStyle()[KEYWORD_VAR_REFER]
     while re.search(reg, newLine):
         s, e = [(m.start(), m.end()) for m in re.finditer(reg, newLine)][0]
         newLine = newLine[:s] + macroDict[formatVar(newLine[s:e])] + newLine[e:]
     return newLine
+
+def compileLine(line, macroDict):
+    newLine = line
+    reg01 = getStyle()[KEYWORD_MULTILINE_REFER_01]
+    if re.search(reg01, newLine):
+        s, e = [(m.start(), m.end()) for m in re.finditer(reg01, newLine)][0]
+        newLine = newLine[:s] + macroDict[formatMultiName(newLine[s:e])] + newLine[e:]
+        newLine = formatMultiLines(newLine, ''*len(newLine[:s]))
+    return compileVar(newLine, macroDict)
 
 # COMPILE SOURCE FILE
 def compileSource(sourceFile, macroDict):
@@ -34,15 +56,30 @@ def compileSources(sourceFiles, macroDict):
         compileSource(sourceFile, macroDict)
 
 # READ MACRO FILES AND GENERATE THE MACRO DICTIONARY
-def getVarValue(line, macroDict):
-    m = re.match(getStyle()[KEYWORD_MACRO_DEFINE], line, re.M|re.I)
-    if m: macroDict[m.group(1)] = compileLine(m.group(2), macroDict)
-    return macroDict
+def getVarValue(line, macroDict, multiLineFlag):
+    mMltiDefine = re.match(getStyle()[KEYWORD_MULTILINE_DEFINE], line, re.M|re.I)
+    if mMltiDefine:
+        multiLineFlag = mMltiDefine.group(1)
+        macroDict[multiLineFlag] = ''
+        return macroDict, multiLineFlag
+
+    mMultiCont = re.match(getStyle()[KEYWORD_MULTILINE_CONTINUE], line, re.M|re.I)
+    if multiLineFlag != '' and mMultiCont:
+        macroDict[multiLineFlag] = macroDict[multiLineFlag] + mMultiCont.group(1) + '\n'
+        return macroDict, multiLineFlag
+
+    m = re.match(getStyle()[KEYWORD_VAR_DEFINE], line, re.M|re.I)
+    if m:
+        macroDict[m.group(1)] = compileLine(m.group(2), macroDict)
+        multiLineFlag = ''
+        return macroDict, multiLineFlag
+    return macroDict, multiLineFlag
 
 def readMacro(macroFile, macroDict):
     with open(macroFile) as f: lines = [line.rstrip('\n') for line in f]
+    multiLineFlag = ''
     for line in lines:
-        macroDict = getVarValue(line, macroDict)
+        macroDict, multiLineFlag = getVarValue(line, macroDict, multiLineFlag)
     return macroDict
 
 def readMacros(macroFiles, macroDict):
@@ -88,3 +125,6 @@ if(__name__ == '__main__'):
     macroDict = readMacros(macroFiles, macroDict)
 
     compileSources(sourceFiles, macroDict)
+
+    for key, value in macroDict.iteritems():
+        print key, ':\t', value
