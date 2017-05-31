@@ -1,0 +1,3 @@
+TS_ECOBJ_01:
+    TESTCASES: 
+        <<TC_GET_NULL()>>
