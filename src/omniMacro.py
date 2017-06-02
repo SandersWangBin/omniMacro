@@ -15,11 +15,13 @@ def genArgsDict(args):
 def formatMultiLines(multiLines, indent):
     newLine = ''
     lineNum = 0
-    for line in multiLines.split('\n'):
+    lines = multiLines.split('\n')
+    for line in lines:
         lineNum = lineNum + 1
+        if lineNum == len(lines): continue
         if lineNum == 1: newLine = newLine + line + '\n'
         else: newLine = newLine + indent + line + '\n'
-    return newLine
+    return newLine[:-1] if newLine.endswith('\n') else newLine
 
 def lookupDict(var, dict1, dict2):
     return dict1[var] if dict1.get(var, None) != None else dict2[var]
