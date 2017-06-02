@@ -2,30 +2,15 @@
 
 import sys, getopt
 import re
-from omniMacroCfg import loadStyle
-
-STYLE_CPP = 'C++'
-KEYWORD_VAR_DEFINE = 'VAR_DEFINE'
-KEYWORD_VAR_REFER = 'VAR_REFER'
-KEYWORD_VAR_PREFIX_NUM = 'VAR_PREFIX_NUM'
-KEYWORD_VAR_POSTFIX_NUM = 'VAR_POSTFIX_NUM'
-KEYWORD_MULTILINE_DEFINE = 'MULTILINE_DEFINE'
-KEYWORD_MULTILINE_CONTINUE = 'MULTILINE_CONTINUE'
-KEYWORD_MULTILINE_REFER_01 = 'MULTILINE_REFER_01'
-KEYWORD_MULTILINE_PREFIX_NUM = 'MULTILINE_PREFIX_NUM'
-KEYWORD_MULTILINE_POSTFIX_NUM = 'MULTILINE_POSTFIX_NUM'
+from omniMacroCfg import *
 
 def getStyle(): return loadStyle(STYLE_CPP)
 
-def formatVar(var):
-    prefixNum = getStyle()[KEYWORD_VAR_PREFIX_NUM]
-    postfixNum = getStyle()[KEYWORD_VAR_POSTFIX_NUM]
-    return var[prefixNum:-postfixNum]
-
-def formatMultiName(multi):
-    prefixNum = getStyle()[KEYWORD_MULTILINE_PREFIX_NUM]
-    postfixNum = getStyle()[KEYWORD_MULTILINE_POSTFIX_NUM]
-    return multi[prefixNum:-postfixNum].strip()
+def genArgsDict(args):
+    argsDict = dict()
+    for arg in args.strip().split(','):
+        argsDict[arg.split('=')[0].strip()] = arg.split('=')[1].strip()
+    return argsDict
 
 def formatMultiLines(multiLines, indent):
     newLine = ''
@@ -36,22 +21,35 @@ def formatMultiLines(multiLines, indent):
         else: newLine = newLine + indent + line + '\n'
     return newLine
 
-def compileVar(line, macroDict):
+def lookupDict(var, dict1, dict2):
+    return dict1[var] if dict1.get(var, None) != None else dict2[var]
+
+def compileVar(line, macroDict, argsDict):
     newLine = line
     reg = getStyle()[KEYWORD_VAR_REFER]
-    while re.search(reg, newLine):
-        s, e = [(m.start(), m.end()) for m in re.finditer(reg, newLine)][0]
-        newLine = newLine[:s] + macroDict[formatVar(newLine[s:e])] + newLine[e:]
+    match = re.search(reg, newLine)
+    while match:
+        s, e = match.start(), match.end()
+        newLine = newLine[:s] + lookupDict(match.group(1), argsDict, macroDict) + newLine[e:]
+        match = re.search(reg, newLine)
     return newLine
 
 def compileLine(line, macroDict):
     newLine = line
-    reg01 = getStyle()[KEYWORD_MULTILINE_REFER_01]
-    if re.search(reg01, newLine):
-        s, e = [(m.start(), m.end()) for m in re.finditer(reg01, newLine)][0]
-        newLine = newLine[:s] + macroDict[formatMultiName(newLine[s:e])] + newLine[e:]
+    argsDict = dict()
+    match01 = re.search(getStyle()[KEYWORD_MULTILINE_REFER_01], newLine)
+    if match01:
+        s, e = match01.start(), match01.end()
+        newLine = newLine[:s] + macroDict[match01.group(1)] + newLine[e:]
         newLine = formatMultiLines(newLine, ' '*len(newLine[:s]))
-    return compileVar(newLine, macroDict)
+    else:
+        match02 = re.search(getStyle()[KEYWORD_MULTILINE_REFER_02], newLine)
+        if match02:
+            s, e = match02.start(), match02.end()
+            func, argsDict = match02.group(1), genArgsDict(match02.group(2))
+            newLine = newLine[:s] + macroDict[func] + newLine[e:]
+            newLine = formatMultiLines(newLine, ' '*len(newLine[:s]))
+    return compileVar(newLine, macroDict, argsDict)
 
 # COMPILE SOURCE FILE
 def compileSource(sourceFile, outputFile, macroDict):
@@ -108,9 +106,8 @@ def parserOptions():
     except getopt.GetoptError:
         showHelp()
 
-    if len(args):
-        sys.stderr.write("Extraneous arguments: %s\n" % args)
-        sys.exit(3)
+    if len(opts) <= 0:
+        showHelp()
 
     macroFiles = None
     sourceFiles = None
